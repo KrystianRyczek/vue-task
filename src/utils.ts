@@ -1,4 +1,5 @@
-import { onMounted, reactive, toRef } from "vue";
+import { onMounted, reactive, toRef} from "vue";
+import { js2xml } from 'xml-js';
 
 export function useExampleData<T extends Record<string, any>>() {
   const data = reactive<{ value: null | T[] }>({
@@ -57,6 +58,23 @@ function csvToArray<T extends Record<string, any>>(input: string) {
 }
 
 // TODO: TASK → implement exporting to XML
+export function exportXmlFromJson (data: object, fileName: string = 'data.xml'){
+  try {
+   const xmlObject = { data: { data: data } };
+   const xml = js2xml(xmlObject, { compact: true, spaces: 2 });
+   const blob = new Blob([xml], { type: 'application/xml' });
+   const link = document.createElement('a');
+   link.href = URL.createObjectURL(blob);
+   link.download = 'transactions.xml';
+   link.click();
+   URL.revokeObjectURL(link.href);
+
+ } catch (error) {
+   console.error('Failed to convert NDJSON to XML:', error);
+ }
+}
+
 export function toXml(input: Record<string, any>[]) {
-  return input.reduce((acc, curr) => `${acc}\n${JSON.stringify(curr)}`, "");
+  const inputString = input.reduce((acc, curr) => `${acc}\n${JSON.stringify(curr)}`, "")
+  return inputString;
 }
