@@ -1,72 +1,17 @@
-<template>
-  <div>
-    <label>xml<input type="radio" value="xml" v-model="view" /></label>
-    <label>table<input type="radio" value="table" v-model="view" /> </label>
-  </div>
-
-  <template v-if="view === 'xml'">
-    <h2>XML</h2>
-    <pre> {{ xml }} </pre>
-  </template>
-
-  <template v-else>
-    <h2>Grouped table</h2>
-    <table>
-      <thead>
-        <tr class="header">
-          <td v-for="header in headers" :key="header">
-            {{ header }}
-          </td>
-        </tr>
-      </thead>
-      <tbody>
-        <template
-          v-for="([key, value], idx) in Object.entries(groupedData)"
-          :key="idx"
-        >
-          <tr @click="groupToggle(key)" class="group">
-            <td>
-              <div style="display: flex; justify-content: space-between">
-                <span>{{ key }}</span>
-              </div>
-            </td>
-          </tr>
-
-          <template v-if="!hidden.has(key)">
-            <tr v-for="(row, idx) in value" :key="idx">
-              <td v-for="(cellValue, cellKey) in row" :key="cellKey">
-                {{ cellValue }}
-              </td>
-            </tr>
-
-            <tr v-if="value.length > 1">
-              <td style="text-align: right">
-                <span v-if="value.length > 1">
-                  total: {{ totalGet(value) }}PLN
-                </span>
-              </td>
-            </tr>
-          </template>
-        </template>
-      </tbody>
-    </table>
-  </template>
-
-  <table>
-    <tr v-for="(item, idx) in data" :key="idx">
-      <td v-for="(_, key) in item" :key="key">
-        <input type="text" v-model="item[key]" />
-      </td>
-    </tr>
-  </table>
-</template>
-
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { dataGroup, toXml, useExampleData } from "./utils";
+import { getCurrentInstance, computed, reactive, ref } from "vue";
+import { dataGroup, toXml, useExampleData, exportXmlFromJson } from "./utils";
+import  RadioFilter  from "./components/RadioFilter.vue"
+import  SelectFilter  from "./components/SelectFilter.vue"
+import  XmlData  from "./components/XmlData.vue"
+import  TableData  from "./components/TableData.vue"
+import  Inputs  from "./components/Inputs.vue"
 
-const view = ref<"xml" | "table">("table");
 
+const radioFilter = ref('table');
+const selectFilter = ref('category');
+const inputData = ref(null);
+const xmlExport = ref('');
 type Data = {
   category: string;
   amount: string;
@@ -76,29 +21,56 @@ type Data = {
 
 const data = useExampleData<Data>();
 
+if(inputData.value ===null){
+inputData.value = data
+};
+
+const handleRadioBtn = (filter)=>{
+  radioFilter.value=filter
+};
+
+const handleSelectFilter = (select)=>{
+  selectFilter.value=select
+};
+
+const handleInputUpdate = (inputUpdate)=>{
+  const index = inputUpdate.id
+  const key = inputUpdate.key
+  const newValue = inputUpdate.newValue
+  inputData.value.value[index][key]=newValue
+};
+
+const handleXmlExport = (xmlExport)=>{
+  exportXmlFromJson(inputData.value.value)
+};
+
 // TODO: TASK → avoid recomputing while user is still typing
-const xml = computed(() => toXml(data.value ?? []));
+const xml = computed(() => toXml(inputData.value.value  ?? []));
 
 // TODO: TASK → let the user also group by currency and account
-const groupedData = computed(() =>
-  data.value //
-    ? dataGroup(data.value, "category")
-    : [],
-);
+const groupedData = computed(() =>{
+  return inputData.value.value  //
+    ? dataGroup(inputData.value.value , selectFilter.value)
+    : []
+},);
 const headers = computed(() =>
-  Object.keys(data.value?.[0] ?? {}).filter((i) => i !== "category"),
+  Object.keys(inputData.value.value ?.[0] ?? {}).filter((i) => i !== selectFilter.value),
 );
-
-const hidden = reactive(new Set<string>());
-function groupToggle(groupKey: string) {
-  hidden.has(groupKey) //
-    ? hidden.delete(groupKey)
-    : hidden.add(groupKey);
-}
 
 // TODO: TASK → handle different currencies. Use `plnToCurrency` function to get the rates
-function totalGet(items: { amount: string | number; currency: string }[]) {
-  return items.reduce((acc, curr) => acc + Number(curr.amount), 0);
+
+async function totalGet( initvalue:object ): Promise<number> {
+  let currency
+  const valuesInPln = await Promise.all(
+    initvalue.items.map(async (item) => {
+         initvalue.selectFilter==='currency'? currency=initvalue.key
+                                            : currency=item.currency
+      const rate = await plnToCurrency(currency.toLowerCase());
+      return Number(item.amount) / rate;
+    })
+  );
+  const total = valuesInPln.reduce((acc, val) => acc + val, 0);
+  return total
 }
 
 // @ts-ignore
@@ -113,8 +85,16 @@ async function plnToCurrency(curr: string) {
 }
 </script>
 
-<style scoped>
-pre {
-  text-align: left;
-}
-</style>
+
+
+<template>
+  <RadioFilter @filter="handleRadioBtn"/>
+  <SelectFilter v-if="radioFilter !== 'xml'" @select="handleSelectFilter"/>
+  <XmlData v-if="radioFilter === 'xml'" :itemsString="xml" @xmlExport="handleXmlExport"/>
+  <TableData v-else :groupedData="groupedData" :headers="headers" :totalGet="totalGet" :selectFilter="selectFilter"/>
+   <Inputs :inputData="inputData.value" @inputUpdate="handleInputUpdate"/>
+</template>
+
+
+
+
